@@ -719,23 +719,24 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
      * @param repayAmount The amount of the underlying borrowed asset to repay
      */
     function liquidateBorrowFresh(address liquidator, address borrower, uint repayAmount, CTokenInterface cTokenCollateral) internal {
-        /* Fail if liquidate not allowed */
+        
+        /* -------------------- 💡 計算可以被清算的量 -------------------- */
         uint allowed = comptroller.liquidateBorrowAllowed(address(this), address(cTokenCollateral), liquidator, borrower, repayAmount);
         if (allowed != 0) {
             revert LiquidateComptrollerRejection(allowed);
         }
 
-        /* Verify market's block number equals current block number */
+        /* ---------------- 💡 檢測利息已經計算到最新的 block --------------- */
         if (accrualBlockNumber != getBlockNumber()) {
             revert LiquidateFreshnessCheck();
         }
 
-        /* Verify cTokenCollateral market's block number equals current block number */
+       /* --------------- 💡 檢測抵押品利息已經計算到最新的 block -------------- */
         if (cTokenCollateral.accrualBlockNumber() != getBlockNumber()) {
             revert LiquidateCollateralFreshnessCheck();
         }
 
-        /* Fail if borrower = liquidator */
+       /* -------💡 自己不能清算自己 ---------------------- */
         if (borrower == liquidator) {
             revert LiquidateLiquidatorIsBorrower();
         }
@@ -750,20 +751,22 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
             revert LiquidateCloseAmountIsUintMax();
         }
 
-        /* Fail if repayBorrow fails */
+       /* ------------💡 還款 ------------------------- */
         uint actualRepayAmount = repayBorrowFresh(liquidator, borrower, repayAmount);
 
         /////////////////////////
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
+       /* -------------💡 計算可以 seize token 的數量 ---------------- */
         /* We calculate the number of collateral tokens that will be seized */
         (uint amountSeizeError, uint seizeTokens) = comptroller.liquidateCalculateSeizeTokens(address(this), address(cTokenCollateral), actualRepayAmount);
         require(amountSeizeError == NO_ERROR, "LIQUIDATE_COMPTROLLER_CALCULATE_AMOUNT_SEIZE_FAILED");
 
-        /* Revert if borrower collateral token balance < seizeTokens */
+        /* ---------💡 seize token 的數量不能大於被清算者所持有的數量 ----------- */
         require(cTokenCollateral.balanceOf(borrower) >= seizeTokens, "LIQUIDATE_SEIZE_TOO_MUCH");
 
+       /* ------------💡 seize ： 清算者獲取 cTokens ----------------------- */
         // If this is also the collateral, run seizeInternal to avoid re-entrancy, otherwise make an external call
         if (address(cTokenCollateral) == address(this)) {
             seizeInternal(address(this), liquidator, borrower, seizeTokens);
@@ -816,10 +819,15 @@ abstract contract CToken is CTokenInterface, ExponentialNoError, TokenErrorRepor
          *  borrowerTokensNew = accountTokens[borrower] - seizeTokens
          *  liquidatorTokensNew = accountTokens[liquidator] + seizeTokens
          */
+
         uint protocolSeizeTokens = mul_(seizeTokens, Exp({mantissa: protocolSeizeShareMantissa}));
+       // ✅ 少掉的數量 = protocolSeizeTokens
+
         uint liquidatorSeizeTokens = seizeTokens - protocolSeizeTokens;
         Exp memory exchangeRate = Exp({mantissa: exchangeRateStoredInternal()});
         uint protocolSeizeAmount = mul_ScalarTruncate(exchangeRate, protocolSeizeTokens);
+        // ✅ 2.8% 被加到保留金裡了 = protocolSeizeTokens
+
         uint totalReservesNew = totalReserves + protocolSeizeAmount;
 
 
