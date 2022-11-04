@@ -87,6 +87,9 @@ describe("Borrow and RepayBorrow Test", function(){
     it("deploy and setup Cerc20", async function() {
 
         accounts = await ethers.getSigners();    
+        user1 = accounts[1];
+        userRich = accounts[2];
+
         comptroller = await deployComptroller();
         interestRateModel = await deployInterestRateModel();
         oracle = await deployOracle();
@@ -104,7 +107,7 @@ describe("Borrow and RepayBorrow Test", function(){
         await comptroller._supportMarket(CTokenA_contract.address);
         await comptroller._supportMarket(CTokenB_contract.address);
         //將 cToken 加入可抵押列表
-        await comptroller.enterMarkets([CTokenA_contract.address, CTokenB_contract.address]);
+        await comptroller.connect(user1).enterMarkets([CTokenA_contract.address, CTokenB_contract.address]);
 
         //set tokenA price to $1
         await oracle.setUnderlyingPrice(CTokenA_contract.address, ethers.utils.parseUnits("1", 18));
@@ -117,46 +120,61 @@ describe("Borrow and RepayBorrow Test", function(){
 
     })
 
-    it("borrow should be ok", async function() {
+    it("Borrow should be ok", async function() {
         //先給 user1 1000顆 TokenB
-        user1 = accounts[1];
         await tokenB_contract.transfer(
             user1.address,
             ethers.utils.parseUnits("1000", 18)
         );
         console.log("transfer 1000 tokenB to user1...");
-        console.log("user1 tokenB blance is:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
+        console.log("user1's tokenB balance:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
+        console.log("--------------------------------------------------------------------");
 
         //先給 userRich 2000顆 TokenA
-        userRich = accounts[2];
         await tokenA_contract.transfer(
             userRich.address,
             ethers.utils.parseUnits("2000", 18)
         );
         console.log("transfer 2000 tokenA to userRich...");
-        console.log("userRich tokenA blance is:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(userRich.address), 18));
+        console.log("userRich's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(userRich.address), 18));
+        console.log("--------------------------------------------------------------------");
 
 
-        //userRich 存 100 顆 TokenA 進去，並取得 100 顆 CTokenA
+        //userRich 存 100 顆 TokenA 進去池子，並取得 100 顆 CTokenA。池子有錢之後，待會才能借出 50 tokenA 給 user1
+        console.log("userRich mint 100 CTokenA...");
         await tokenA_contract.connect(userRich).approve(CTokenA_contract.address, ethers.utils.parseUnits("100", 18));
         await CTokenA_contract.connect(userRich).mint(ethers.utils.parseUnits("100", 18));
-        console.log("userRich tokenA balance is:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(userRich.address), 18));
-        console.log("userRich CTokenA balance is:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(userRich.address), 18));
+        console.log("userRich's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(userRich.address), 18));
+        console.log("userRich's CTokenA balance:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(userRich.address), 18));
+        console.log("CTokenA's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(CTokenA_contract.address), 18));
+        console.log("--------------------------------------------------------------------");
 
-        console.log("mint..");
+        console.log("user1 mint 1 CTokenB...");
         //user1 存 1 顆 TokenB 進去，並取得 1 顆 CTokenB
         await tokenB_contract.connect(user1).approve(CTokenB_contract.address, ethers.utils.parseUnits("1", 18));
         await CTokenB_contract.connect(user1).mint(ethers.utils.parseUnits("1", 18));
-        console.log("user1 tokenA blance is:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
-        console.log("user1 tokenB blance is:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
-        console.log("user1 CTokenB blance is:", ethers.utils.formatUnits(await CTokenB_contract.balanceOf(user1.address), 18));
+        console.log("user1's tokenA blance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
+        console.log("user1's tokenB blance:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
+        console.log("user1's CTokenB blance:", ethers.utils.formatUnits(await CTokenB_contract.balanceOf(user1.address), 18));
+        console.log("--------------------------------------------------------------------");
 
         //user1 抵押品為 1 顆 TokenB($100)，collateral factor 為 50%，表示可借出 $50 等值的 tokenA($1)，也就是 50 顆 tokenA
+        console.log("user1 borrow 50 tokenA...");
         await CTokenA_contract.connect(user1).borrow(ethers.utils.parseUnits("50", 18))
-        console.log("user1 tokenA blance is:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
-        console.log("user1 tokenB blance is:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
-        console.log("user1 CTokenB blance is:", ethers.utils.formatUnits(await CTokenB_contract.balanceOf(user1.address), 18));
+        console.log("user1's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
+        console.log("CTokenA's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(CTokenA_contract.address), 18));
+        console.log("--------------------------------------------------------------------");
 
+    })
+
+    it("RepayBorrow should be ok", async function() {
+        //user1 aprrove CTokenA contract 去轉移他的 tokenA 餘額
+        console.log("user1 repayBorrow 50 tokenA...");
+        await tokenA_contract.connect(user1).approve(CTokenA_contract.address, ethers.utils.parseUnits("50", 18));
+        await CTokenA_contract.connect(user1).repayBorrow(ethers.utils.parseUnits("50", 18));
+        console.log("user1's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
+        console.log("CTokenA's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(CTokenA_contract.address), 18));
+        console.log("--------------------------------------------------------------------");
     })
 
 })
