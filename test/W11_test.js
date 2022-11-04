@@ -87,8 +87,8 @@ describe("CERC20", function(){
         console.log("redeem is done");
         expect(await erc20.balanceOf(user1.address)).to.equal(ethers.utils.parseUnits("1000", 18));
         expect(await cerc20.balanceOf(user1.address)).to.equal(ethers.utils.parseUnits("0", 18));
-        logErc20UserBalance();
-        logCErc20UserBalance();
+        await logErc20UserBalance();
+        await logCErc20UserBalance();
 
         async function logErc20UserBalance() {
             console.log(
