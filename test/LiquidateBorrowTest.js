@@ -63,9 +63,7 @@ async function deployCToken(erc20, comptroller, interestRateModel, name, symbol,
     return cerc20;
 }
 
-
-
-describe("Borrow and RepayBorrow Test", function(){
+describe("Liquidate Borrow Test", function(){
 
     let accounts;
     let comptroller;
@@ -80,8 +78,7 @@ describe("Borrow and RepayBorrow Test", function(){
     //user2 存入 tokenA 到池子裡，讓 user1 可以借出 tokenA。
     //在 collateral factor 下降後或 tokenB 價格下降後，由 user2 來對 user1 進行清算 （user2 幫 user1 償還欠下的 tokenA）
 
-    it("deploy and setup Cerc20", async function() {
-
+    async function setupCerc20() {
         accounts = await ethers.getSigners();    
         user1 = accounts[1];
         user2 = accounts[2];
@@ -111,49 +108,10 @@ describe("Borrow and RepayBorrow Test", function(){
 
         //set collateral factor to 50%
         await comptroller._setCollateralFactor(CTokenB_contract.address, ethers.utils.parseUnits("0.5", 18));
+    }
 
-    })
-
-    it("modify the collateral factor to 0.1", async function() {
-        //先給 user1 1000顆 TokenB
-        await tokenB_contract.transfer(user1.address,ethers.utils.parseUnits("1000", 18));
-
-        //先給 user2 2000顆 TokenA
-        await tokenA_contract.transfer(user2.address,ethers.utils.parseUnits("2000", 18));
-
-        //user2 存 100 顆 TokenA 進去池子，並取得 100 顆 CTokenA。池子有錢之後，待會才能借出 50 tokenA 給 user1
-        console.log("user2 mint 100 CTokenA...");
-        await tokenA_contract.connect(user2).approve(CTokenA_contract.address, ethers.utils.parseUnits("100", 18));
-        await CTokenA_contract.connect(user2).mint(ethers.utils.parseUnits("100", 18));
-        console.log("user2's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user2.address), 18));
-        console.log("user2's CTokenA balance:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(user2.address), 18));
-        console.log("CTokenA's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(CTokenA_contract.address), 18));
+    async function logBalance() {
         console.log("--------------------------------------------------------------------");
-
-        console.log("user1 mint 1 CTokenB...");
-        //user1 存 1 顆 TokenB 進去，並取得 1 顆 CTokenB
-        await tokenB_contract.connect(user1).approve(CTokenB_contract.address, ethers.utils.parseUnits("1", 18));
-        await CTokenB_contract.connect(user1).mint(ethers.utils.parseUnits("1", 18));
-        console.log("user1's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
-        console.log("user1's CTokenA balance:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(user1.address), 18));
-        console.log("user1's tokenB balance:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
-        console.log("user1's CTokenB balance:", ethers.utils.formatUnits(await CTokenB_contract.balanceOf(user1.address), 18));
-        console.log("--------------------------------------------------------------------");
-
-        //user1 借出 50 顆 tokenA
-        console.log("user1 borrow 50 tokenA...");
-        await CTokenA_contract.connect(user1).borrow(ethers.utils.parseUnits("50", 18))
-        console.log("user1's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
-        console.log("user1's CTokenA balance:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(user1.address), 18));
-        console.log("user1's tokenB balance:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
-        console.log("user1's CTokenB balance:", ethers.utils.formatUnits(await CTokenB_contract.balanceOf(user1.address), 18));
-        console.log("CTokenA's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(CTokenA_contract.address), 18));
-        console.log("--------------------------------------------------------------------");
-
-        await comptroller._setCollateralFactor(CTokenB_contract.address, ethers.utils.parseUnits("0.1", 18));
-
-        await CTokenA_contract.connect(user2).liquidateBorrow(user1.address, ethers.utils.parseUnits("25", 18), CTokenB_contract.address);
-
         console.log("user1's tokenA balance:", ethers.utils.formatUnits(await tokenA_contract.balanceOf(user1.address), 18));
         console.log("user1's CTokenA balance:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(user1.address), 18));
         console.log("user1's tokenB balance:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user1.address), 18));
@@ -163,6 +121,81 @@ describe("Borrow and RepayBorrow Test", function(){
         console.log("user2's CTokenA balance:", ethers.utils.formatUnits(await CTokenA_contract.balanceOf(user2.address), 18));
         console.log("user2's tokenB balance:", ethers.utils.formatUnits(await tokenB_contract.balanceOf(user2.address), 18));
         console.log("user2's CTokenB balance:", ethers.utils.formatUnits(await CTokenB_contract.balanceOf(user2.address), 18));
+    }
+
+    it("Liquidate Borrow: modify the collateral factor to 0.1", async function() {
+
+        await setupCerc20();
+
+        //給 user2 2000顆 TokenA
+        await tokenA_contract.transfer(user2.address,ethers.utils.parseUnits("2000", 18));
+
+        //user2 存 100 顆 TokenA 進去 A 池子，並取得 100 顆 CTokenA。池子有錢之後，待會才能借出 50 tokenA 給 user1
+        //CTokenA's tokenA: 100
+        //user2's tokenA: 1900, CTokenA: 100, 
+        console.log("user2 mint 100 CTokenA...");
+        await tokenA_contract.connect(user2).approve(CTokenA_contract.address, ethers.utils.parseUnits("100", 18));
+        await CTokenA_contract.connect(user2).mint(ethers.utils.parseUnits("100", 18));
+
+        //給 user1 1000顆 TokenB
+        await tokenB_contract.transfer(user1.address,ethers.utils.parseUnits("1000", 18));
+        //user1 存 1 顆 TokenB 進去 B 池子，並取得 1 顆 CTokenB
+        // user1's tokenB: 999, CTokenB: 1
+        console.log("user1 mint 1 CTokenB...");
+        await tokenB_contract.connect(user1).approve(CTokenB_contract.address, ethers.utils.parseUnits("1", 18));
+        await CTokenB_contract.connect(user1).mint(ethers.utils.parseUnits("1", 18));
+        
+
+        //user1 以池子中的 1 顆 tokenB 作為抵押，借出 50 顆 tokenA
+        //user1's tokenA: 50
+        console.log("user1 borrow 50 tokenA...");
+        await CTokenA_contract.connect(user1).borrow(ethers.utils.parseUnits("50", 18))
+        
+        //降低 collateral factor 
+        //讓 user1 被 user2 清算 25 顆 tokenA
+        console.log("tokenB collateral factor down to 60, start liquidating borrow...");
+        await comptroller._setCollateralFactor(CTokenB_contract.address, ethers.utils.parseUnits("0.1", 18));
+        await tokenA_contract.connect(user2).approve(CTokenA_contract.address, ethers.utils.parseUnits("25", 18));
+        await CTokenA_contract.connect(user2).liquidateBorrow(user1.address, ethers.utils.parseUnits("25", 18), CTokenB_contract.address);
+        await logBalance();
+
+    })
+
+    it("Liquidate Borrow: modify the price to 0.1", async function() {
+
+        await setupCerc20();
+
+        //給 user2 2000顆 TokenA
+        await tokenA_contract.transfer(user2.address,ethers.utils.parseUnits("2000", 18));
+
+        //user2 存 100 顆 TokenA 進去 A 池子，並取得 100 顆 CTokenA。池子有錢之後，待會才能借出 50 tokenA 給 user1
+        //CTokenA's tokenA: 100
+        //user2's tokenA: 1900, CTokenA: 100, 
+        console.log("user2 mint 100 CTokenA...");
+        await tokenA_contract.connect(user2).approve(CTokenA_contract.address, ethers.utils.parseUnits("100", 18));
+        await CTokenA_contract.connect(user2).mint(ethers.utils.parseUnits("100", 18));
+
+        //給 user1 1000顆 TokenB
+        await tokenB_contract.transfer(user1.address,ethers.utils.parseUnits("1000", 18));
+        //user1 存 1 顆 TokenB 進去 B 池子，並取得 1 顆 CTokenB
+        // user1's tokenB: 999, CTokenB: 1
+        console.log("user1 mint 1 CTokenB...");
+        await tokenB_contract.connect(user1).approve(CTokenB_contract.address, ethers.utils.parseUnits("1", 18));
+        await CTokenB_contract.connect(user1).mint(ethers.utils.parseUnits("1", 18));
+        
+
+        //user1 以池子中的 1 顆 tokenB 作為抵押，借出 50 顆 tokenA
+        //user1's tokenA: 50
+        console.log("user1 borrow 50 tokenA...");
+        await CTokenA_contract.connect(user1).borrow(ethers.utils.parseUnits("50", 18))
+        
+        //降低 TokenB 價格
+        //讓 user1 被 user2 清算 25 顆 tokenA
+        console.log("tokenB price down to 60, start liquidating borrow...");
+        await oracle.setUnderlyingPrice(CTokenB_contract.address, ethers.utils.parseUnits("60", 18));
+        await tokenA_contract.connect(user2).approve(CTokenA_contract.address, ethers.utils.parseUnits("25", 18));
+        await CTokenA_contract.connect(user2).liquidateBorrow(user1.address, ethers.utils.parseUnits("25", 18), CTokenB_contract.address);
+        await logBalance();
 
     })
 
