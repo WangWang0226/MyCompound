@@ -1,13 +1,30 @@
-# Sample Hardhat Project
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
-
-Try running some of the following tasks:
-
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.js
+# Before Test
 ```
+npm install --save-dev hardhat
+npx hardhat
+
+//安裝必要套件
+npm install --save-dev @openzeppelin/contracts
+
+//建立本地節點
+npx hardhat node
+```
+
+## Run MintAndRedeemTest
+```
+npx hardhat test test/MintAndRedeemTest.js --network localhost
+```
+
+
+## Run BorrowAndRepayBorrowTest
+
+```
+npx hardhat test test/BorrowAndRepayBorrowTest.js --network localhost
+```
+
+## Run LiquidateBorrowTest
+```
+npx hardhat test test/LiquidateBorrowTest.js --network localhost
+```
+
