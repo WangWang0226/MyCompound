@@ -3,7 +3,7 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "hardhat/console.sol";
 
-contract TokenA is ERC20 {
+contract WangWangERC20 is ERC20 {
 
     event LogTotalSupply(string message, uint totalSupply);
     event LogBalanceOf(address addr, uint balance);

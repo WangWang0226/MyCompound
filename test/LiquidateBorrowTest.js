@@ -15,23 +15,12 @@ async function deployOracle() {
     return oracle
 }
 
-async function deployTokenA() {
-    const erc20Factory = await ethers.getContractFactory("TokenA");
+async function deployERC20() {
+    const erc20Factory = await ethers.getContractFactory("WangWangERC20");
     const erc20 = await erc20Factory.deploy(
         ethers.utils.parseUnits("10000", 18),
-        "TokenA",
-        "A"
-    );
-    await erc20.deployed();
-    return erc20;
-}
-
-async function deployTokenB() {
-    const erc20Factory = await ethers.getContractFactory("TokenB");
-    const erc20 = await erc20Factory.deploy(
-        ethers.utils.parseUnits("10000", 18),
-        "TokenB",
-        "B"
+        "TestToken",
+        "TT"
     );
     await erc20.deployed();
     return erc20;
@@ -78,7 +67,7 @@ describe("Liquidate Borrow Test", function(){
     //user2 存入 tokenA 到池子裡，讓 user1 可以借出 tokenA。
     //在 collateral factor 下降後或 tokenB 價格下降後，由 user2 來對 user1 進行清算 （user2 幫 user1 償還欠下的 tokenA）
 
-    async function setupCerc20() {
+    beforeEach(async function() {
         accounts = await ethers.getSigners();    
         user1 = accounts[1];
         user2 = accounts[2];
@@ -87,8 +76,8 @@ describe("Liquidate Borrow Test", function(){
         interestRateModel = await deployInterestRateModel();
         oracle = await deployOracle();
 
-        tokenA_contract = await deployTokenA();
-        tokenB_contract = await deployTokenB();
+        tokenA_contract = await deployERC20();
+        tokenB_contract = await deployERC20();
 
         CTokenA_contract = await deployCToken(tokenA_contract, comptroller, interestRateModel, "CTokenA", "CTA", accounts[0]);
         CTokenB_contract = await deployCToken(tokenB_contract, comptroller, interestRateModel, "CTokenB", "CTB", accounts[0]);
@@ -108,7 +97,7 @@ describe("Liquidate Borrow Test", function(){
 
         //set collateral factor to 50%
         await comptroller._setCollateralFactor(CTokenB_contract.address, ethers.utils.parseUnits("0.5", 18));
-    }
+    })
 
     async function logBalance() {
         console.log("--------------------------------------------------------------------");
@@ -124,8 +113,6 @@ describe("Liquidate Borrow Test", function(){
     }
 
     it("Liquidate Borrow: modify the collateral factor to 0.1", async function() {
-
-        await setupCerc20();
 
         //給 user2 2000顆 TokenA
         await tokenA_contract.transfer(user2.address,ethers.utils.parseUnits("2000", 18));
@@ -163,8 +150,6 @@ describe("Liquidate Borrow Test", function(){
 
     it("Liquidate Borrow: modify the price to 0.1", async function() {
 
-        await setupCerc20();
-
         //給 user2 2000顆 TokenA
         await tokenA_contract.transfer(user2.address,ethers.utils.parseUnits("2000", 18));
 
@@ -198,6 +183,4 @@ describe("Liquidate Borrow Test", function(){
         await logBalance();
 
     })
-
-
 })
