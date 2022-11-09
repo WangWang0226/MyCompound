@@ -84,7 +84,7 @@ describe("Borrow and RepayBorrow Test", function(){
     let user1;
     let userRich;
 
-    it("deploy and setup Cerc20", async function() {
+    before(async function() {
 
         accounts = await ethers.getSigners();    
         user1 = accounts[1];
