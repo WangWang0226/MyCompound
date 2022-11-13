@@ -95,7 +95,7 @@ describe("Liquidate Borrow Test", function(){
         //set tokenB price to $100
         await oracle.setUnderlyingPrice(CTokenB_contract.address, ethers.utils.parseUnits("100", 18));
 
-        //set collateral factor to 50%
+        //set tokenB collateral factor to 50%
         await comptroller._setCollateralFactor(CTokenB_contract.address, ethers.utils.parseUnits("0.5", 18));
     })
 
