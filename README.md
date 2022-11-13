@@ -6,6 +6,8 @@ npx hardhat
 
 //安裝必要套件
 npm install --save-dev @openzeppelin/contracts
+npm install --save-dev chai
+npm install dotenv
 
 ```
 
