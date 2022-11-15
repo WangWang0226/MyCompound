@@ -20,6 +20,9 @@ contract WangWangFlashLoan is FlashLoanReceiverBase, Ownable {
     address UNI_ADDRESS = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984;
     address UNISWAP_ROUTER_ADDRESS = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
 
+    IERC20 usdcContract = IERC20(USDC_ADDRESS);
+    IERC20 uniContract = IERC20(UNI_ADDRESS);
+
     function executeOperation(
         address[] calldata assets, //USDC
         uint256[] calldata amounts, //2500
@@ -30,45 +33,45 @@ contract WangWangFlashLoan is FlashLoanReceiverBase, Ownable {
         (address cUsdcAddress, address user1Address, address cUniAddress) = abi
             .decode(params, (address, address, address));
 
-        IERC20 usdcContract = IERC20(USDC_ADDRESS);
-        IERC20 uniContract = IERC20(UNI_ADDRESS);
-        CErc20 cUsdcContract = CErc20(cUsdcAddress);
-        CErc20 cUniContract = CErc20(cUniAddress);
-        ISwapRouter swapRouter = ISwapRouter(UNISWAP_ROUTER_ADDRESS);
-
         uint owedAmount = amounts[0] + premiums[0];
 
         //approve cUsdc transfer our USDC out
-        //msg.sender matters in these two function!
+        //msg.sender matters!
         usdcContract.approve(cUsdcAddress, owedAmount);
-        cUsdcContract.liquidateBorrow(user1Address, amounts[0], cUniContract);
 
-        // redeem: cUni to Uni
-        cUniContract.redeem(cUniContract.balanceOf(address(this)));
+        {
+            CErc20 cUniContract = CErc20(cUniAddress);
+            //msg.sender matters!
+            CErc20(cUsdcAddress).liquidateBorrow(user1Address, amounts[0], cUniContract);
+            // redeem: cUni to Uni
+            cUniContract.redeem(cUniContract.balanceOf(address(this)));
+        }
 
         uint uniAmount = uniContract.balanceOf(address(this));
 
         // approve uniswap to use UNI
         uniContract.approve(UNISWAP_ROUTER_ADDRESS, uniAmount);
 
-        ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter
-            .ExactInputSingleParams({
-                tokenIn: UNI_ADDRESS,
-                tokenOut: USDC_ADDRESS,
-                fee: 3000, // 0.3%
-                recipient: address(this),
-                deadline: block.timestamp,
-                amountIn: uniAmount,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            });
+        {
+            ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: UNI_ADDRESS,
+                    tokenOut: USDC_ADDRESS,
+                    fee: 3000, // 0.3%
+                    recipient: address(this),
+                    deadline: block.timestamp,
+                    amountIn: uniAmount,
+                    amountOutMinimum: 0,
+                    sqrtPriceLimitX96: 0
+                });
 
-        uint256 amountOut = swapRouter.exactInputSingle(swapParams);
+            uint256 amountOut = ISwapRouter(UNISWAP_ROUTER_ADDRESS).exactInputSingle(swapParams);
+
+            require(amountOut > owedAmount, "we should have benefit");
+        }
 
         //approve lending pool can transfer out the amount we owed.
         usdcContract.approve(address(LENDING_POOL), owedAmount);
-
-        require(amountOut > owedAmount, "we should have benefit");
 
         return true;
     }

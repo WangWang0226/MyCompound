@@ -70,8 +70,8 @@ async function deployCToken(erc20, comptroller, interestRateModel, exchangeRate,
 async function deployAaveLendingPool(lendingPoolProviderAdress) {
 
     const factory = await ethers.getContractFactory("WangWangFlashLoan");
-    const flashLoan = await factory.deploy()
-    await flashLoan.deployed(lendingPoolProviderAdress);
+    const flashLoan = await factory.deploy(lendingPoolProviderAdress);
+    await flashLoan.deployed();
     return flashLoan
 }
 
@@ -177,7 +177,7 @@ describe("Q6 Test", function () {
         expect(price).to.equal(ethers.utils.parseUnits("6.2", 18));
     })
 
-    it("user2 跟 AAVE 閃電貸借 2500 USDC，幫 user1 清算(還款)，拿到 user1 的抵押品(cUNI)後，領出 UNI", async function() {
+    it("user2 跟 AAVE 閃電貸借 2500 USDC，幫 user1 清算(還款)，拿到 user1 的抵押品(cUNI)後，領出 UNI 並換回 USDC 來償還 FlashLoan", async function() {
         const abiCoder = new ethers.utils.AbiCoder()
         const params = abiCoder.encode( 
           ['address', 'address', 'address'],
