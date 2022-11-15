@@ -178,6 +178,7 @@ describe("Liquidate Borrow Test", function(){
         //讓 user1 被 user2 清算 25 顆 tokenA
         console.log("tokenB price down to 60, start liquidating borrow...");
         await oracle.setUnderlyingPrice(CTokenB_contract.address, ethers.utils.parseUnits("60", 18));
+        //允許 CTokenA 把 user2 的 tokenA 轉出去
         await tokenA_contract.connect(user2).approve(CTokenA_contract.address, ethers.utils.parseUnits("25", 18));
         await CTokenA_contract.connect(user2).liquidateBorrow(user1.address, ethers.utils.parseUnits("25", 18), CTokenB_contract.address);
         await logBalance();

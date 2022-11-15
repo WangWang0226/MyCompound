@@ -51,13 +51,13 @@ async function deployInterestRateModel() {
     return interestRateModel;
 }
 
-async function deployCToken(erc20, comptroller, interestRateModel, name, symbol, account) {
+async function deployCToken(erc20, comptroller, interestRateModel, exchangeRate, name, symbol, account) {
     const cerc20Factory = await ethers.getContractFactory("CErc20Immutable");
     const cerc20 = await cerc20Factory.deploy(
         erc20.address,
         comptroller.address,
         interestRateModel.address,
-        ethers.utils.parseUnits("1", 18),
+        exchangeRate,
         name,
         symbol,
         18,
@@ -67,8 +67,21 @@ async function deployCToken(erc20, comptroller, interestRateModel, name, symbol,
     return cerc20;
 }
 
+async function deployAaveLendingPool(lendingPoolProviderAdress) {
+
+    const factory = await ethers.getContractFactory("WangWangFlashLoan");
+    const flashLoan = await factory.deploy()
+    await flashLoan.deployed(lendingPoolProviderAdress);
+    return flashLoan
+}
+
 describe("Q6 Test", function () {
-    let binanceWalletAddress = '0xF977814e90dA44bFA03b6295A0616a897441aceC'
+    const BINANCE_WALLET_ADDRESS = '0xF977814e90dA44bFA03b6295A0616a897441aceC'
+    const AAVE_LENDING_POOL_ADDRESS = '0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9'
+    const AAVE_LENDING_POOL_PROVIDER_ADDRESS = '0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5'
+    const USDC_ADDRESS = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+    const UNI_ADDRESS = '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'
+
     
     let user1;
     let user2;
@@ -79,46 +92,50 @@ describe("Q6 Test", function () {
     let comptroller;
     let interestRateModel;
     let oracle;
+    let aaveLendingPool;
+    let flashLoan;
     
-    beforeEach(async function () {
+    before(async function () {
 
         /* <------- Deploy cToken contracts ------->*/
         const accounts = await ethers.getSigners();
         user1 = accounts[1]
         user2 = accounts[2]
 
-        const usdcAddress = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
-        usdcContract = await ethers.getContractAt(erc20_abi, usdcAddress);
-        console.log("Binance wallet USDC balance:", ethers.utils.formatUnits(await usdcContract.balanceOf(binanceWalletAddress), 6))
+        usdcContract = await ethers.getContractAt(erc20_abi, USDC_ADDRESS);
+        console.log("Binance wallet USDC balance:", ethers.utils.formatUnits(await usdcContract.balanceOf(BINANCE_WALLET_ADDRESS), 6))
 
-        const uniAddress = '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'
-        uniContract = await ethers.getContractAt(erc20_abi, uniAddress);
-        console.log("Binance wallet UNI balance:", ethers.utils.formatUnits(await uniContract.balanceOf(binanceWalletAddress), 18))
+        uniContract = await ethers.getContractAt(erc20_abi, UNI_ADDRESS);
+        console.log("Binance wallet UNI balance:", ethers.utils.formatUnits(await uniContract.balanceOf(BINANCE_WALLET_ADDRESS), 18))
 
 
         comptroller = await deployComptroller();
         interestRateModel = await deployInterestRateModel();
         oracle = await deployOracle();
 
-        cUsdcContract = await deployCToken(usdcContract, comptroller, interestRateModel, "CUsdcToken", "CUSDC", accounts[0]);
-        cUniContract = await deployCToken(uniContract, comptroller, interestRateModel, "CUniToken", "CUNI", accounts[0]);
+        cUsdcContract = await deployCToken(usdcContract, comptroller, interestRateModel, ethers.utils.parseUnits("1", 6), "CUsdcToken", "CUSDC", accounts[0]);
+        cUniContract = await deployCToken(uniContract, comptroller, interestRateModel, ethers.utils.parseUnits("1", 18), "CUniToken", "CUNI", accounts[0]);
 
+        /* <------- deploy Aave related contract ------->*/
+        flashLoan = await deployAaveLendingPool(AAVE_LENDING_POOL_PROVIDER_ADDRESS);
+        aaveLendingPool = await ethers.getContractAt("ILendingPool", AAVE_LENDING_POOL_ADDRESS);
+        
         /* <------- Set market environment ------->*/
         await comptroller._setPriceOracle(oracle.address);
         await comptroller._supportMarket(cUsdcContract.address);
         await comptroller._supportMarket(cUniContract.address);
         await comptroller.connect(user1).enterMarkets([cUsdcContract.address, cUniContract.address]);
         
-        await oracle.setUnderlyingPrice(cUsdcContract.address, ethers.utils.parseUnits("1", 18));
+        await oracle.setUnderlyingPrice(cUsdcContract.address, ethers.utils.parseUnits("1", 30));
         await oracle.setUnderlyingPrice(cUniContract.address, ethers.utils.parseUnits("10", 18));
 
         await comptroller._setCollateralFactor(cUniContract.address, ethers.utils.parseUnits("0.5", 18));
         await comptroller._setLiquidationIncentive(ethers.utils.parseUnits("1.08", 18));
         await comptroller._setCloseFactor(ethers.utils.parseUnits("0.5", 18));
 
-        /* <------- Give money to pool and user ------->*/
-        await impersonateAccount(binanceWalletAddress)
-        const binanceWallet = await ethers.getSigner(binanceWalletAddress);
+        /* <------- Give money to pool and user -------> */
+        await impersonateAccount(BINANCE_WALLET_ADDRESS)
+        const binanceWallet = await ethers.getSigner(BINANCE_WALLET_ADDRESS);
 
         //Give user1 1000 UNI
         const amount = ethers.utils.parseUnits("1000", 18)
@@ -131,8 +148,10 @@ describe("Q6 Test", function () {
         await usdcContract.connect(binanceWallet).approve(cUsdcContract.address, depositAmount);
         await cUsdcContract.connect(binanceWallet).mint(depositAmount);
 
-        const cUsdcPoolBalance = await usdcContract.balanceOf(cUsdcContract.address);
-        expect(cUsdcPoolBalance).to.eq(depositAmount) 
+        const UsdcBalanceOfcUsdcPool = await usdcContract.balanceOf(cUsdcContract.address);
+        expect(UsdcBalanceOfcUsdcPool).to.eq(depositAmount) 
+        const cUsdcBalanceOfBinanceWallet = await cUsdcContract.balanceOf(binanceWallet.address);
+        expect(cUsdcBalanceOfBinanceWallet).to.eq(ethers.utils.parseUnits("12000", 18))
 
     });
 
@@ -152,6 +171,32 @@ describe("Q6 Test", function () {
         expect(cUsdcPoolBalance).to.eq(ethers.utils.parseUnits("7000", 6)) 
     })
 
-    
+    it("將 UNI 價格改為 $6.2 使 User1 產生 Shortfall", async function() {
+        await oracle.setUnderlyingPrice(cUniContract.address, ethers.utils.parseUnits("6.2", 18));
+        const price = await oracle.getUnderlyingPrice(cUniContract.address);
+        expect(price).to.equal(ethers.utils.parseUnits("6.2", 18));
+    })
+
+    it("user2 跟 AAVE 閃電貸借 2500 USDC，幫 user1 清算(還款)，拿到 user1 的抵押品(cUNI)後，領出 UNI", async function() {
+        const abiCoder = new ethers.utils.AbiCoder()
+        const params = abiCoder.encode( 
+          ['address', 'address', 'address'],
+          [cUsdcContract.address, user1.address, cUniContract.address]
+        )
+
+        flashLoan.executeFlashLoan(
+            [usdcContract.address],
+            [ethers.utils.parseUnits("2500", 6)],
+            [0],
+            params,
+            [0]
+        )
+
+        // flashloan profit > 0
+        expect(await usdcContract.balanceOf(flashLoan.address))
+        .to.above(ethers.utils.parseUnits("0", 6))
+
+    })
+
 
 });

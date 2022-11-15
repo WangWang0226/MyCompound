@@ -6,6 +6,7 @@
     "hardhat": "^2.12.1"
   },
   "dependencies": {
+    "@uniswap/v3-periphery": "^1.4.3",
     "dotenv": "^16.0.3"
   }
 }
